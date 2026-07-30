@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.venv/
+
+# Local tooling / editor config
+.claude/
+.DS_Store
+
+# Cloudflare Wrangler
+.wrangler/

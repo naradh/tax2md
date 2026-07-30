@@ -1,0 +1,165 @@
+"""Tests for tax2md. Run with:  python3 -m pytest  (or)  python3 tests/test_convert.py
+
+These use no third-party deps so they run under the stock macOS Python too.
+"""
+
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+
+from tax2md.cli import clean_html, clean_markdown, decode_html, html_to_markdown  # noqa: E402
+
+
+def _md(html: str) -> str:
+    return clean_markdown(html_to_markdown(clean_html(html)))
+
+
+def test_layout_table_is_unwrapped_and_inner_table_survives():
+    html = """
+    <table border=0><tr><td>
+      <h1>Computation of Total Income</h1>
+      <table border=1>
+        <tr><th>Particulars</th><th>Amount</th></tr>
+        <tr><td>Basic</td><td>6,00,000</td></tr>
+      </table>
+    </td></tr></table>
+    """
+    md = _md(html)
+    assert "[TABLE]" not in md
+    assert "# Computation of Total Income" in md
+    assert "| Particulars" in md
+    assert "6,00,000" in md
+
+
+def test_br_between_numbers_keeps_values_distinct():
+    html = "<table><tr><td>x</td><td>3,240<br>12,000</td></tr></table>"
+    md = _md(html)
+    assert "[TABLE]" not in md
+    assert "3,240" in md and "12,000" in md
+    assert "3,24012,000" not in md  # must not fuse
+
+
+def test_multi_paragraph_cell_does_not_break_table():
+    html = "<table><tr><td><p>A</p><p>B</p></td><td>1</td></tr></table>"
+    md = _md(html)
+    assert "[TABLE]" not in md
+    assert "A" in md and "B" in md and "1" in md
+
+
+def test_numbers_negatives_percent_rupee_preserved():
+    html = ("<table><tr><td>Std ded</td><td>(50,000)</td></tr>"
+            "<tr><td>Rate</td><td>5.2%</td></tr>"
+            "<tr><td>Tax</td><td>&#8377;45,240</td></tr></table>")
+    md = _md(html)
+    assert "(50,000)" in md
+    assert "5.2%" in md
+    assert "₹45,240" in md or "₹45,240" in md
+
+
+def test_script_style_comments_hidden_removed():
+    html = ("<style>.x{color:red}</style><script>var a=1;</script>"
+            "<!-- secret --><div style='display:none'>tracking</div>"
+            "<p>Visible</p>")
+    md = _md(html)
+    assert "color:red" not in md
+    assert "var a" not in md
+    assert "secret" not in md
+    assert "tracking" not in md
+    assert "Visible" in md
+
+
+def test_meta_refresh_and_office_namespaces_removed():
+    html = ('<meta http-equiv="refresh" content="0;url=logout.html">'
+            '<o:p></o:p><w:sdt><w:sdtContent>KeptName</w:sdtContent></w:sdt>'
+            '<p>Body</p>')
+    md = _md(html)
+    assert "logout.html" not in md
+    assert "KeptName" in md  # real content inside w:sdt survives
+    assert "Body" in md
+
+
+def test_headings_and_notes_preserved():
+    html = "<h2>Deductions</h2><p><i>Note: as per 80C.</i></p>"
+    md = _md(html)
+    assert "## Deductions" in md
+    assert "Note: as per 80C." in md
+
+
+def test_refresh_link_removed():
+    html = ('<a class="refresh-btn" href="https://x/CompleteReport?format=html">'
+            'Click here to refresh</a><p>Report</p>')
+    md = _md(html)
+    assert "refresh" not in md.lower()
+    assert "CompleteReport" not in md
+    assert "Report" in md
+
+
+def test_real_links_are_kept():
+    html = '<p>See <a href="https://cleartax.in/">www.cleartax.in</a></p>'
+    md = _md(html)
+    assert "cleartax.in" in md
+
+
+def test_trailing_hardbreak_backslash_stripped():
+    html = "<p>Line one<br>Line two</p>"
+    md = _md(html)
+    assert "\\" not in md
+    assert "Line one" in md and "Line two" in md
+
+
+def test_empty_columns_and_spacer_rows_pruned():
+    html = ("<table>"
+            "<tr><th>A</th><th></th><th>C</th></tr>"
+            "<tr><td>x</td><td></td><td>1</td></tr>"
+            "<tr><td></td><td></td><td></td></tr>"
+            "<tr><td>y</td><td></td><td>2</td></tr>"
+            "</table>")
+    md = _md(html)
+    header = next(line for line in md.splitlines() if line.startswith("|"))
+    assert header.count("|") == 3          # 2 columns -> 3 pipes (empty col dropped)
+    assert "| x | 1 |" in md and "| y | 2 |" in md
+    assert "|  |  |" not in md              # all-empty spacer row dropped
+
+
+def test_column_with_some_data_is_kept():
+    html = ("<table>"
+            "<tr><th>A</th><th>B</th><th>C</th></tr>"
+            "<tr><td>x</td><td></td><td>1</td></tr>"
+            "<tr><td>y</td><td>7</td><td>2</td></tr>"
+            "</table>")
+    md = _md(html)
+    assert "7" in md                        # middle column has data -> kept
+    header = next(line for line in md.splitlines() if line.startswith("|"))
+    assert header.count("|") == 4           # 3 columns preserved
+
+
+def test_decode_utf8_and_cp1252():
+    assert decode_html("Jÿ".encode("utf-8")) == "Jÿ"
+    # 0x92 is a Windows-1252 smart quote but an invalid lone UTF-8 byte.
+    assert decode_html(b"It\x92s") == "It’s"
+    # 0x81 is undefined in cp1252 -> must not raise.
+    decode_html(b"bad\x81byte")
+
+
+def test_bom_utf8():
+    assert decode_html("﻿Hello".encode("utf-8")) == "Hello"
+
+
+def _run_all():
+    ns = dict(globals())
+    failures = 0
+    for name, fn in sorted(ns.items()):
+        if name.startswith("test_") and callable(fn):
+            try:
+                fn()
+                print(f"PASS {name}")
+            except AssertionError as e:
+                failures += 1
+                print(f"FAIL {name}: {e}")
+    print(f"\n{'ALL PASSED' if not failures else str(failures) + ' FAILED'}")
+    return 1 if failures else 0
+
+
+if __name__ == "__main__":
+    sys.exit(_run_all())

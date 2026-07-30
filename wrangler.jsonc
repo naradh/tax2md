@@ -1,0 +1,9 @@
+{
+  // Static-assets-only Cloudflare deployment for the tax2md web app.
+  // No Worker script — Cloudflare just serves the files in ./web.
+  "name": "tax2md",
+  "compatibility_date": "2026-07-01",
+  "assets": {
+    "directory": "./web"
+  }
+}

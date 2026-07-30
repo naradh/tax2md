@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>tax2md — ClearTax report → clean Markdown for AI</title>
+  <meta name="description" content="Convert a ClearTax computation report (saved as a full webpage) into clean Markdown for AI — 100% in your browser. Nothing is uploaded. Cuts token usage by 80%+.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧾</text></svg>">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>🧾 <span class="mono">tax2md</span></h1>
+      <p class="tagline">Turn a ClearTax computation report into clean Markdown for AI.</p>
+    </header>
+
+    <div class="note">
+      <b>What this is for:</b> ClearTax <b>computation reports</b> only. In your browser, save the
+      report page as <b>“Webpage, Complete”</b> (a <code>.html</code> file), then drop it below.
+      You get clean Markdown to paste into Claude, ChatGPT, etc. — typically <b>80%+ fewer tokens</b>
+      than feeding the raw HTML.
+    </div>
+
+    <div class="card">
+      <label class="drop" id="drop">
+        <div class="big">Drop your ClearTax <code>.html</code> here</div>
+        <div class="sub">or click to choose a file</div>
+        <input type="file" id="file" accept=".html,.htm,text/html">
+      </label>
+      <div class="privacy">
+        <span class="dot" aria-hidden="true"></span>
+        100% in your browser. Your file is never uploaded — this page has no server.
+      </div>
+      <div class="error" id="error"></div>
+    </div>
+
+    <div class="card result" id="result">
+      <div class="filerow">
+        <div class="filename" id="outname">report.md <span class="badge">converted</span></div>
+      </div>
+      <div class="stats">
+        <div class="stat"><div class="num" id="stat-html">—</div><div class="lbl">HTML tokens (est.)</div></div>
+        <div class="stat"><div class="num" id="stat-md">—</div><div class="lbl">Markdown tokens (est.)</div></div>
+        <div class="stat save"><div class="num" id="stat-save">—</div><div class="lbl">tokens saved</div></div>
+      </div>
+      <div class="actions">
+        <button class="primary" id="download">↓ Download .md</button>
+        <button class="ghost" id="copy">Copy Markdown</button>
+        <button class="ghost" id="reset">Convert another</button>
+      </div>
+      <pre class="preview" id="preview"></pre>
+    </div>
+
+    <div class="card how">
+      <b>How to get the file from ClearTax</b>
+      <ol>
+        <li>Open your ClearTax computation report in the browser.</li>
+        <li>Press <code>Ctrl/Cmd&nbsp;+&nbsp;S</code> and choose <b>“Webpage, Complete”</b> — this saves an <code>.html</code> file.</li>
+        <li>Drop that <code>.html</code> file above. Everything runs locally; nothing leaves your device.</li>
+      </ol>
+    </div>
+
+    <footer>
+      Open source (MIT) · runs entirely client-side ·
+      <a id="ghlink" href="#">source on GitHub</a> · by
+      <a href="https://naradh.in">Naradh</a>
+    </footer>
+  </div>
+
+  <script src="tax2md.js"></script>
+  <script>
+    (function () {
+      var fileInput = document.getElementById("file");
+      var drop = document.getElementById("drop");
+      var result = document.getElementById("result");
+      var errorBox = document.getElementById("error");
+      var preview = document.getElementById("preview");
+      var outname = document.getElementById("outname");
+      var statHtml = document.getElementById("stat-html");
+      var statMd = document.getElementById("stat-md");
+      var statSave = document.getElementById("stat-save");
+
+      var currentMd = "";
+      var currentName = "report.md";
+
+      // Rough, tokenizer-agnostic estimate (~4 chars/token).
+      function estTokens(s) { return Math.max(1, Math.round(s.length / 4)); }
+      function fmt(n) { return n.toLocaleString(); }
+
+      function showError(msg) {
+        errorBox.textContent = msg;
+        errorBox.classList.add("show");
+        result.classList.remove("show");
+      }
+
+      function handleFile(file) {
+        errorBox.classList.remove("show");
+        var name = file.name || "report.html";
+        if (!/\.html?$/i.test(name)) {
+          showError("Please choose a .html file — the ClearTax report saved as “Webpage, Complete”.");
+          return;
+        }
+        var reader = new FileReader();
+        reader.onerror = function () { showError("Could not read that file. Please try again."); };
+        reader.onload = function () {
+          try {
+            var htmlLen = new Uint8Array(reader.result).length;
+            var md = window.tax2md.convertBytes(reader.result);
+            currentMd = md;
+            currentName = name.replace(/\.html?$/i, "") + ".md";
+
+            outname.innerHTML = "";
+            outname.appendChild(document.createTextNode(currentName + " "));
+            var badge = document.createElement("span");
+            badge.className = "badge"; badge.textContent = "converted";
+            outname.appendChild(badge);
+
+            preview.textContent = md;
+
+            var tHtml = estTokens(new TextDecoder().decode(new Uint8Array(reader.result)));
+            var tMd = estTokens(md);
+            var saved = tHtml > 0 ? Math.round((1 - tMd / tHtml) * 100) : 0;
+            statHtml.textContent = "~" + fmt(tHtml);
+            statMd.textContent = "~" + fmt(tMd);
+            statSave.textContent = saved + "%";
+
+            result.classList.add("show");
+            result.scrollIntoView({ behavior: "smooth", block: "nearest" });
+          } catch (e) {
+            showError("Conversion failed: " + (e && e.message ? e.message : e));
+          }
+        };
+        reader.readAsArrayBuffer(file);
+      }
+
+      fileInput.addEventListener("change", function () {
+        if (fileInput.files && fileInput.files[0]) handleFile(fileInput.files[0]);
+      });
+
+      ["dragenter", "dragover"].forEach(function (ev) {
+        drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add("drag"); });
+      });
+      ["dragleave", "drop"].forEach(function (ev) {
+        drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove("drag"); });
+      });
+      drop.addEventListener("drop", function (e) {
+        if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) {
+          handleFile(e.dataTransfer.files[0]);
+        }
+      });
+
+      document.getElementById("download").addEventListener("click", function () {
+        var blob = new Blob([currentMd], { type: "text/markdown;charset=utf-8" });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement("a");
+        a.href = url; a.download = currentName;
+        document.body.appendChild(a); a.click();
+        document.body.removeChild(a);
+        setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+      });
+
+      document.getElementById("copy").addEventListener("click", function () {
+        var btn = this;
+        navigator.clipboard.writeText(currentMd).then(function () {
+          var old = btn.textContent; btn.textContent = "Copied ✓";
+          setTimeout(function () { btn.textContent = old; }, 1400);
+        }).catch(function () { showError("Copy failed — select the text and copy manually."); });
+      });
+
+      document.getElementById("reset").addEventListener("click", function () {
+        currentMd = ""; fileInput.value = "";
+        result.classList.remove("show");
+        errorBox.classList.remove("show");
+        drop.scrollIntoView({ behavior: "smooth", block: "center" });
+      });
+    })();
+  </script>
+</body>
+</html>

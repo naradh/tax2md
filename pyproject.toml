@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tax2md"
+version = "0.1.0"
+description = "Convert a ClearTax computation HTML report into clean, AI-ready Markdown"
+requires-python = ">=3.9"
+dependencies = []
+
+[project.scripts]
+tax2md = "tax2md.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
