@@ -23,11 +23,13 @@
     </div>
 
     <div class="card">
-      <label class="drop" id="drop">
-        <div class="big">Drop your ClearTax <code>.html</code> here</div>
-        <div class="sub">or click to choose a file</div>
-        <input type="file" id="file" accept=".html,.htm,text/html">
-      </label>
+      <div class="drop" id="drop" role="button" tabindex="0" aria-label="Choose or drop a ClearTax HTML file">
+        <div class="drop-icon" aria-hidden="true">📄</div>
+        <div class="big">Drag &amp; drop your ClearTax <code>.html</code> file here</div>
+        <div class="sub">— or —</div>
+        <button type="button" class="primary choose" id="choose">Choose file…</button>
+        <input type="file" id="file" accept=".html,.htm,text/html" hidden>
+      </div>
       <div class="privacy">
         <span class="dot" aria-hidden="true"></span>
         100% in your browser. Your file is never uploaded — this page has no server.
@@ -63,7 +65,7 @@
 
     <footer>
       Open source (MIT) · runs entirely client-side ·
-      <a id="ghlink" href="#">source on GitHub</a> · by
+      <a href="https://github.com/naradh/tax2md" target="_blank" rel="noopener">source on GitHub</a> · by
       <a href="https://naradh.in">Naradh</a>
     </footer>
   </div>
@@ -134,20 +136,44 @@
         reader.readAsArrayBuffer(file);
       }
 
+      var chooseBtn = document.getElementById("choose");
+
+      function openPicker() { fileInput.click(); }
+
       fileInput.addEventListener("change", function () {
         if (fileInput.files && fileInput.files[0]) handleFile(fileInput.files[0]);
       });
 
-      ["dragenter", "dragover"].forEach(function (ev) {
-        drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add("drag"); });
+      // Explicit button + clicking anywhere in the drop zone opens the picker.
+      chooseBtn.addEventListener("click", function (e) { e.stopPropagation(); openPicker(); });
+      drop.addEventListener("click", function (e) { if (e.target !== chooseBtn) openPicker(); });
+      drop.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openPicker(); }
       });
-      ["dragleave", "drop"].forEach(function (ev) {
-        drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove("drag"); });
+
+      // Stop the browser from navigating away when a file is dropped anywhere.
+      ["dragover", "drop"].forEach(function (ev) {
+        window.addEventListener(ev, function (e) { e.preventDefault(); }, false);
+      });
+
+      ["dragenter", "dragover"].forEach(function (ev) {
+        drop.addEventListener(ev, function (e) {
+          e.preventDefault(); e.stopPropagation();
+          if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+          drop.classList.add("drag");
+        });
+      });
+      ["dragleave", "dragend"].forEach(function (ev) {
+        drop.addEventListener(ev, function (e) {
+          e.preventDefault(); e.stopPropagation();
+          drop.classList.remove("drag");
+        });
       });
       drop.addEventListener("drop", function (e) {
-        if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) {
-          handleFile(e.dataTransfer.files[0]);
-        }
+        e.preventDefault(); e.stopPropagation();
+        drop.classList.remove("drag");
+        var files = e.dataTransfer && e.dataTransfer.files;
+        if (files && files[0]) handleFile(files[0]);
       });
 
       document.getElementById("download").addEventListener("click", function () {
