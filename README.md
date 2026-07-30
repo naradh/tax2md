@@ -66,17 +66,29 @@ The command-line version uses [Pandoc](https://pandoc.org) under the hood.
 
 ### Install
 
+Install the `tax2md` command straight from GitHub — no clone needed:
+
 ```sh
+# recommended: isolated install via pipx
+pipx install git+https://github.com/naradh/tax2md
+
+# or with plain pip
+python3 -m pip install --user "git+https://github.com/naradh/tax2md"
+```
+
+Then `tax2md` is on your `PATH`. (With plain `pip --user`, the script lands in
+your Python user `bin`, e.g. `~/Library/Python/3.9/bin`; add that to `PATH` if it
+isn't already, or use `pipx`, which handles it for you.)
+
+<details>
+<summary>Develop locally instead</summary>
+
+```sh
+git clone https://github.com/naradh/tax2md
+cd tax2md
 python3 -m pip install --user -e .
 ```
-
-pip installs the `tax2md` script into your Python user `bin` (e.g.
-`~/Library/Python/3.9/bin`). If that directory isn't on your `PATH`, symlink the
-script somewhere that is:
-
-```sh
-ln -s ~/Library/Python/3.9/bin/tax2md /opt/homebrew/bin/tax2md
-```
+</details>
 
 ### Use
 
